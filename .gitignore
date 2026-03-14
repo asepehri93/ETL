@@ -16,11 +16,14 @@ build/
 
 # Run outputs (reproduce with run_suite_sio2.py)
 outputs_*/
+baseline_outputs/
+test_outputs*/
 **/dumps/
 *.dump
 log.lammps
 screen.txt
 wall_time.txt
+trajectory.xyz
 
 # OS and editor
 .DS_Store
