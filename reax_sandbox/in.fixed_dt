@@ -1,0 +1,13 @@
+# Fixed time step reference (baseline for ETL validation)
+
+include         in.init_reax
+
+timestep        0.1
+
+# Dump every 1000 steps = 0.1 ps at dt=0.1 fs
+dump            dmp all custom 1000 dump_fixed.lammpstrj id type x y z q
+dump_modify     dmp sort id
+
+run             500000
+
+write_data      final_fixed.data

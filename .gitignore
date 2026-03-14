@@ -1,0 +1,34 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Run outputs (reproduce with run_suite_sio2.py)
+outputs_*/
+**/dumps/
+*.dump
+log.lammps
+screen.txt
+wall_time.txt
+
+# OS and editor
+.DS_Store
+._*
+*.swp
+*.swo
+*~
+
+# Optional: uncomment to exclude large restart/data if not needed for reproduction
+# *.rst
+# silica_1500.data

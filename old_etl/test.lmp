@@ -1,0 +1,20 @@
+variable    CH4file string ./mol.ch4
+variable    O2file  string ./mol.o2
+
+units      real
+atom_style charge
+boundary   p p p
+region     box block 0 20 0 20 0 20
+create_box 3 box
+
+molecule   ch4 ${CH4file}
+molecule   o2  ${O2file}
+
+create_atoms 0 single 10 10 10 mol ch4
+create_atoms 0 single 12 10 10 mol o2
+
+pair_style  reaxff NULL
+pair_coeff  * * ffield.reax.cho C H O   # 1→C, 2→H, 3→O
+fix         qeq all qeq/reax 1 10.0 1.0e-6 200
+timestep    0.1
+run         0

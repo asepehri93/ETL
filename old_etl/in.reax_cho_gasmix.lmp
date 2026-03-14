@@ -1,0 +1,70 @@
+# Gas-phase CH4 + O2 oxidation (ReaxFF-CHO)
+# Units: real (fs, Å, kcal/mol)
+units           real
+atom_style      charge
+boundary        p p p
+
+# ------------ Box ------------
+variable        L equal 60.0          # box edge (Å) — tweak density via L
+region          box block 0 ${L} 0 ${L} 0 ${L}
+create_box      3 box                 # 3 atom types: 1=C, 2=H, 3=O
+
+# ------------ Molecule templates ------------
+# Types must match: 1=C, 2=H, 3=O
+molecule        ch4 mol.ch4
+molecule        o2  mol.o2
+
+# ------------ Random packing of molecules ------------
+# Choose counts (adjust to taste / density)
+variable        nCH4 equal 120
+variable        nO2  equal 240
+# Seed for reproducibility
+variable        s equal 873421
+
+# Insert CH4 molecules randomly, avoiding overlaps
+create_atoms    0 random ${nCH4} ${s} box mol ch4 12345 overlap 2.0
+# Insert O2 molecules
+create_atoms    0 random ${nO2}  ${s} box mol o2  67890 overlap 1.5
+
+# Optional quick energy minimization (relieve bad contacts)
+min_style       cg
+minimize        1.0e-4 1.0e-6 500 5000
+
+# ------------ Force field ------------
+pair_style      reaxff NULL
+# Map LAMMPS types -> elements in THIS order: C (type1), H (type2), O (type3)
+pair_coeff      * * ffield.reax.cho C H O
+special_bonds   reax/c
+
+# ------------ Neighbor & charges ------------
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# Mandatory charge equilibration for ReaxFF:
+# fix qeq/reax <Nevery> <cutoff_Ang> <tol> <maxiter>
+fix             qeq all qeq/reax 1 10.0 1.0e-6 200
+
+# ------------ Thermostat (oxidation conditions) ------------
+# Choose a hot NVT to trigger chemistry; start at 1500 K (adjust to study)
+velocity        all create 1500.0 492783 mom yes rot yes dist gaussian
+fix             int all nve
+fix             lang all langevin 1500.0 1500.0 100.0 90421  # Tstart Tend damp seed
+
+# ------------ Timestep & output ------------
+timestep        0.1                     # conservative to start; raise to 0.25 fs if stable
+thermo_style    custom step temp press pe ke etotal
+thermo          500
+
+# Dumps (compressed) every 1 ps (at 0.1 fs → every 10,000 steps)
+dump            xyz all custom 10000 dumps/xyz.*.gz id type q x y z
+dump_modify     xyz sort id
+
+# Restarts
+restart         50000 restarts/reaxff.*.rst
+
+# ------------ Equilibration & production ------------
+# (1) Short stabilization
+run             50000                  # 5 ps
+
+# (2) Production (longer)
+run             500000                 # 50 ps

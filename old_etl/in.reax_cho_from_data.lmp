@@ -1,0 +1,30 @@
+# CH4 + O2 gas from DATA file (ReaxFF-CHO)
+units           real
+atom_style      charge
+boundary        p p p
+
+read_data       ./data.gasmix_cho.lmp
+
+pair_style      reaxff NULL
+pair_coeff      * * ffield.reax.cho C H O
+special_bonds   reax/c
+
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+fix             qeq all qeq/reax 1 10.0 1.0e-6 200
+
+velocity        all create 1500.0 492783 mom yes rot yes dist gaussian
+fix             int all nve
+fix             lang all langevin 1500.0 1500.0 100.0 90421
+
+timestep        0.1
+thermo_style    custom step temp press pe ke etotal
+thermo          500
+
+dump            xyz all custom 10000 dumps/xyz.*.gz id type q x y z
+dump_modify     xyz sort id
+restart         50000 restarts/reaxff.*.rst
+
+run             50000
+run             500000

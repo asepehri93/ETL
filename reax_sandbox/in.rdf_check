@@ -1,0 +1,8 @@
+# RDF validation (compare fixed vs adaptive later)
+
+include         in.init_reax
+
+compute         myrdf all rdf 200
+fix             rdf_out all ave/time 100 1 100 c_myrdf[*] file rdf.out mode vector
+
+run             500000

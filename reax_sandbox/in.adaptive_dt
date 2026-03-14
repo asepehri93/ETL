@@ -1,0 +1,54 @@
+# Adaptive dt from displacement bound: dt <= sqrt(eps*m/F_eff)
+# RMS force metric, smoothing, time-based dump
+
+include         in.init_reax
+
+# --------------------------
+# USER PARAMETERS
+# --------------------------
+variable        eps equal 1.0e-4
+variable        dt_min equal 0.02
+variable        dt_max equal 0.25
+variable        alpha equal 0.2
+
+# --------------------------
+# COMPUTE FORCE METRIC (RMS over atoms)
+# --------------------------
+compute         fmag all property/atom fx fy fz
+compute         f2sum all reduce sum c_fmag[1]*c_fmag[1]+c_fmag[2]*c_fmag[2]+c_fmag[3]*c_fmag[3]
+variable        frms equal sqrt(c_f2sum/atoms)
+
+variable        m_eff equal 12.0
+variable        dt equal 0.1
+timestep        ${dt}
+
+thermo          100
+
+# --------------------------
+# MAIN LOOP (single-step + dt update)
+# --------------------------
+variable        dump_interval equal 0.1
+variable        next_dump equal 0.0
+variable        step loop 500000
+
+label           loop
+
+# Proposed dt from displacement bound: dt <= sqrt(eps*m/F)
+variable        dt_raw equal sqrt(${eps}*${m_eff}/v_frms)
+variable        dt_clamped equal max(${dt_min},min(${dt_max},v_dt_raw))
+variable        dt_new equal ${alpha}*v_dt_clamped+(1.0-${alpha})*${dt}
+
+timestep        ${dt_new}
+variable        dt equal v_dt_new
+
+run             1 pre yes post yes
+
+# Time-based dump (append when time >= next_dump)
+variable        t equal time
+if "${t} >= ${next_dump}" then "write_dump all custom dump_adaptive.lammpstrj id type x y z q append yes"
+if "${t} >= ${next_dump}" then "variable next_dump equal ${next_dump}+${dump_interval}"
+
+next            step
+jump            SELF loop
+
+write_data      final_adaptive.data

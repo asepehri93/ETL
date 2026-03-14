@@ -1,0 +1,45 @@
+# ---------- INITIALIZATION (gas-phase CH4 + O2, no data file) ----------
+
+units           real
+atom_style      charge
+boundary        p p p
+
+# ------------ Box ------------
+variable        L equal 60.0
+region          box block 0 ${L} 0 ${L} 0 ${L}
+create_box      3 box
+
+# ------------ Molecule templates (1=C, 2=H, 3=O) ------------
+molecule        ch4 mol.ch4
+molecule        o2  mol.o2
+
+# ------------ Random packing ------------
+variable        nCH4 equal 120
+variable        nO2  equal 240
+variable        s equal 873421
+
+create_atoms    0 random ${nCH4} ${s} box mol ch4 12345 overlap 2.0
+create_atoms    0 random ${nO2}  ${s} box mol o2  67890 overlap 1.5
+
+min_style       cg
+minimize        1.0e-4 1.0e-6 500 5000
+
+# ---------- FORCE FIELD ----------
+
+pair_style      reax/c NULL
+pair_coeff      * * ffield.reax.cho C H O
+special_bonds   reax/c
+
+fix             qeq all qeq/reax 1 0.0 10.0 1e-6 reax/c
+
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# ---------- THERMOSTAT / BAROSTAT ----------
+
+timestep        0.1
+
+fix             npt all npt temp 300.0 300.0 100.0 iso 1.0 1.0 1000.0
+
+thermo          100
+thermo_style    custom step time temp press etotal ke pe

@@ -1,0 +1,50 @@
+# ReaxFF-CHO gas-phase CH4 + O2 (Python-driven FULL ETL)
+# - Builds the system (no read_data required)
+# - Does NOT define QEq (Python owns fix qeq/reaxff)
+# - Does NOT define Langevin thermostat (Python owns fix lang for adaptive coupling)
+# - Python controls timestep, QEq tol, Langevin damp, and time-based dumps
+#
+# Units: real (fs, Å, kcal/mol)
+
+units           real
+atom_style      charge
+boundary        p p p
+
+# ------------ Box ------------
+variable        L equal 60.0
+region          box block 0 ${L} 0 ${L} 0 ${L}
+create_box      3 box                 # 1=C, 2=H, 3=O
+
+# ------------ Molecules ------------
+molecule        ch4 ../mol.ch4
+molecule        o2  ../mol.o2
+
+variable        nCH4 equal 120
+variable        nO2  equal 240
+variable        seed equal 873421
+
+create_atoms    0 random ${nCH4} ${seed} box mol ch4 12345 overlap 2.0
+create_atoms    0 random ${nO2}  ${seed} box mol o2  67890 overlap 1.5
+
+# ------------ ReaxFF ------------
+mass            1 12.011
+mass            2 1.008
+mass            3 15.999
+pair_style      reaxff NULL
+pair_coeff      * * ../../ffield.txt C H O
+
+fix             q all qeq/reaxff 1 0.0 10.0 1.0e-6 reaxff maxiter 200
+
+# Relax bad contacts before dynamics
+min_style       cg
+minimize        1.0e-4 1.0e-6 500 5000
+
+# ------------ Dynamics (oxidation conditions) ------------
+velocity        all create 1500.0 492783 mom yes rot yes dist gaussian
+fix             int all nve
+
+thermo_style    custom step time temp press pe ke etotal
+thermo          1000
+
+# NOTE: QEq and Langevin are defined by Python; timestep is set by Python.
+

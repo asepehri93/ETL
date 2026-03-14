@@ -1,0 +1,196 @@
+LAMMPS (22 Jul 2025 - Update 2)
+units real
+atom_style full
+boundary p p p
+read_data "/Volumes/Extreme Pro/ETL/reax_sandbox/sio2_etl/silica_1500.data"
+Reading data file ...
+  orthogonal box = (-3.1662119 2.4397298 1.5469185) to (67.160017 18.145848 19.038659)
+  1 by 1 by 1 MPI processor grid
+  reading atom labelmap ...
+  reading atoms ...
+  1500 atoms
+Finding 1-2 1-3 1-4 neighbors ...
+  special bond factors lj:    0        0        0       
+  special bond factors coul:  0        0        0       
+     0 = max # of 1-2 neighbors
+     0 = max # of 1-3 neighbors
+     0 = max # of 1-4 neighbors
+     1 = max # of special neighbors
+  special bonds CPU = 0.000 seconds
+  read_data CPU = 0.010 seconds
+pair_style reaxff NULL safezone 3.0 mincap 150
+pair_coeff * * "/Volumes/Extreme Pro/ETL/reax_sandbox/sio2_etl/ffield.reax.CHOFe" Si O
+WARNING: Van der Waals parameters for element SI indicate inner wall+shielding, but earlier atoms indicate a different van der Waals method. This may cause division-by-zero errors. Keeping van der Waals setting for earlier atoms. (src/src/REAXFF/reaxff_ffield.cpp:255)
+WARNING: Van der Waals parameters for element AL indicate inner wall+shielding, but earlier atoms indicate a different van der Waals method. This may cause division-by-zero errors. Keeping van der Waals setting for earlier atoms. (src/src/REAXFF/reaxff_ffield.cpp:255)
+WARNING: Changed valency_val to valency_boc for X (src/src/REAXFF/reaxff_ffield.cpp:300)
+neighbor 2.0 bin
+neigh_modify every 1 delay 0 check yes
+fix qeq all qeq/reaxff 1 0.0 10.0 1.0e-6 reaxff maxiter 400
+min_style cg
+minimize 1.0e-4 1.0e-6 200 2000
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Your simulation uses code contributions which should be cited:
+
+- Type Label Framework: https://doi.org/10.1021/acs.jpcb.3c08419
+
+@Article{Gissinger24,
+ author = {Jacob R. Gissinger, Ilia Nikiforov, Yaser Afshar, Brendon Waters, Moon-ki Choi, Daniel S. Karls, Alexander Stukowski, Wonpil Im, Hendrik Heinz, Axel Kohlmeyer, and Ellad B. Tadmor},
+ title = {Type Label Framework for Bonded Force Fields in LAMMPS},
+ journal = {J. Phys. Chem. B},
+ year =    2024,
+ volume =  128,
+ number =  13,
+ pages =   {3282--3297}
+}
+
+- pair reaxff command: doi:10.1016/j.parco.2011.08.005
+
+@Article{Aktulga12,
+ author = {H. M. Aktulga and J. C. Fogarty and S. A. Pandit and A. Y. Grama},
+ title = {Parallel Reactive Molecular Dynamics: {N}umerical Methods and Algorithmic Techniques},
+ journal = {Parallel Computing},
+ year =    2012,
+ volume =  38,
+ number =  {4--5},
+ pages =   {245--259}
+}
+
+- fix qeq/reaxff command: doi:10.1016/j.parco.2011.08.005
+
+@Article{Aktulga12,
+ author = {H. M. Aktulga and J. C. Fogarty and S. A. Pandit and A. Y. Grama},
+ title = {Parallel Reactive Molecular Dynamics: {N}umerical Methods and Algorithmic Techniques},
+ journal = {Parallel Computing},
+ year =    2012,
+ volume =  38,
+ pages =   {245--259}
+}
+
+CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE-CITE
+
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 12
+  ghost atom cutoff = 12
+  binsize = 6, bins = 12 3 3
+  2 neighbor lists, perpetual/occasional/extra = 2 0 0
+  (1) pair reaxff, perpetual
+      attributes: half, newton off, ghost
+      pair build: half/bin/ghost/newtoff
+      stencil: full/ghost/bin/3d
+      bin: standard
+  (2) fix qeq/reaxff, perpetual, copy from (1)
+      attributes: half, newton off
+      pair build: copy
+      stencil: none
+      bin: none
+Per MPI rank memory allocation (min/avg/max) = 460 | 460 | 460 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press     
+         0   0             -213485.76      0             -213485.76      336782.95    
+        41   0             -222941.51      0             -222941.51      32027.279    
+Loop time of 16.8747 on 1 procs for 41 steps with 1500 atoms
+
+98.4% CPU use with 1 MPI tasks x no OpenMP threads
+
+Minimization stats:
+  Stopping criterion = energy tolerance
+  Energy initial, next-to-last, final = 
+     -213485.759910242  -222928.670175751  -222941.511108853
+  Force two-norm initial, final = 19448.475 5008.8241
+  Force max component initial, final = 2184.9401 1416.1236
+  Final line search alpha, max atom move = 0.00021141787 0.29939383
+  Iterations, force evaluations = 41 108
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 10.835     | 10.835     | 10.835     |   0.0 | 64.21
+Bond    | 3.3325e-05 | 3.3325e-05 | 3.3325e-05 |   0.0 |  0.00
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 0.0056124  | 0.0056124  | 0.0056124  |   0.0 |  0.03
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 6.0309     | 6.0309     | 6.0309     |   0.0 | 35.74
+Other   |            | 0.00363    |            |       |  0.02
+
+Nlocal:           1500 ave        1500 max        1500 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:          10501 ave       10501 max       10501 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         638979 ave      638979 max      638979 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 638979
+Ave neighs/atom = 425.986
+Ave special neighs/atom = 0
+Neighbor list builds = 0
+Dangerous builds = 0
+reset_timestep 0
+velocity all create 300.0 48279 dist gaussian
+unfix nve
+ERROR: Could not find fix ID nve to delete (src/src/modify.cpp:1071)
+unfix lang
+ERROR: Could not find fix ID lang to delete (src/src/modify.cpp:1071)
+fix nve all nve
+fix lang all langevin 300.0 300.0 100.0 48279
+thermo 100
+thermo_style custom step time temp press pe ke etotal
+timestep 0.5
+run 2000
+Per MPI rank memory allocation (min/avg/max) = 458.9 | 458.9 | 458.9 Mbytes
+   Step          Time           Temp          Press          PotEng         KinEng         TotEng    
+         0   0              300            35196.977     -222941.52      1340.4703     -221601.05    
+       100   50             312.19392      35331.103     -222991.79      1394.9556     -221596.83    
+       200   100            321.48985      38422.866     -223155.7       1436.492      -221719.2     
+       300   150            307.40696      31733.944     -223172.39      1373.5663     -221798.83    
+       400   200            318.95216      38619.406     -223270.13      1425.153      -221844.98    
+       500   250            308.1568       28888.132     -223295.54      1376.9168     -221918.62    
+       600   300            304.44903      35475.299     -223323.78      1360.3496     -221963.43    
+       700   350            303.64261      37578.141     -223339.74      1356.7463     -221983       
+       800   400            304.40248      36397.204     -223347.09      1360.1416     -221986.95    
+       900   450            300.33278      37908.336     -223405.14      1341.9572     -222063.18    
+      1000   500            298.62862      39180.532     -223435.75      1334.3426     -222101.4     
+      1100   550            305.79035      40960.535     -223482.09      1366.3429     -222115.75    
+      1200   600            302.31825      33447.354     -223473.85      1350.8288     -222123.03    
+      1300   650            305.57228      38170.998     -223480.2       1365.3685     -222114.83    
+      1400   700            295.57336      38037.231     -223446.01      1320.691      -222125.32    
+      1500   750            294.60291      37950.045     -223468.01      1316.3548     -222151.66    
+      1600   800            292.27874      31535.92      -223504.2       1305.9699     -222198.23    
+      1700   850            301.46889      31740.013     -223536.46      1347.0336     -222189.43    
+      1800   900            301.74899      39781.242     -223527.66      1348.2852     -222179.38    
+      1900   950            302.2123       36376.251     -223546.42      1350.3553     -222196.07    
+      2000   1000           297.06998      33067.324     -223565.48      1327.3783     -222238.1     
+Loop time of 309.264 on 1 procs for 2000 steps with 1500 atoms
+
+Performance: 0.279 ns/day, 85.907 hours/ns, 6.467 timesteps/s, 9.700 katom-step/s
+96.7% CPU use with 1 MPI tasks x no OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 207.16     | 207.16     | 207.16     |   0.0 | 66.98
+Bond    | 0.00070675 | 0.00070675 | 0.00070675 |   0.0 |  0.00
+Neigh   | 0.4837     | 0.4837     | 0.4837     |   0.0 |  0.16
+Comm    | 0.10855    | 0.10855    | 0.10855    |   0.0 |  0.04
+Output  | 0.00028873 | 0.00028873 | 0.00028873 |   0.0 |  0.00
+Modify  | 101.49     | 101.49     | 101.49     |   0.0 | 32.82
+Other   |            | 0.02644    |            |       |  0.01
+
+Nlocal:           1500 ave        1500 max        1500 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Nghost:          10500 ave       10500 max       10500 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+Neighs:         638376 ave      638376 max      638376 min
+Histogram: 1 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 638376
+Ave neighs/atom = 425.584
+Ave special neighs/atom = 0
+Neighbor list builds = 6
+Dangerous builds = 0
+reset_timestep 0
+write_restart "/Volumes/Extreme Pro/ETL/reax_sandbox/sio2_etl/restart_sio2_1500.rst"
+System init for write_restart ...
+Total wall time: 0:05:26

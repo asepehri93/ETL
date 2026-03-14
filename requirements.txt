@@ -1,0 +1,5 @@
+# ETL / ReaxFF sandbox
+numpy
+lammps
+# Optional for plotting / analysis:
+# matplotlib
