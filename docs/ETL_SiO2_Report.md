@@ -16,7 +16,7 @@ In many computational methods—from molecular dynamics to neural-network traini
 
 **From equilibrium paths to nonequilibrium trajectories.** In molecular dynamics we do not follow an equilibrium path: the system is out of equilibrium and evolves according to equations of motion. We can still ask: along the **trajectory** in configuration (and momentum) space, can we define a local measure of "distance" or "cost" per step that plays a role analogous to thermodynamic length? If so, choosing step sizes so that **each step contributes the same amount to that measure** would correspond to "equal thermodynamic length" along the trajectory: we take **larger steps when the local cost is low** (calm regions) and **smaller steps when the local cost is high** (stiff or rapidly changing regions), without hand-tuning. That is the core of ETL in MD.
 
-**What we use in practice.** We do not compute the full Fisher metric along the MD trajectory. Instead we use a **local scalar proxy** for how "expensive" or "stiff" the current configuration is: the **force power** S̄ (defined below), which has dimensions consistent with a curvature or stiffness and is cheap to compute from the forces. We then require that each integration step contribute a fixed amount to a **squared-length** measure built from S̄ and the thermal scale *k*ₑ*T*, and we deduce the timestep Δ*t* from that condition. The same idea is extended to **charge-equilibration (QEq) tolerance** (how much numerical error we allow in forces from the QEq solver) and to **how fast we advance along a prescribed temperature schedule** (the ramp). The following subsections give the precise definitions, the reasoning behind each formula, and full derivations with every variable defined.
+**What we use in practice.** We do not compute the full Fisher metric along the MD trajectory. Instead we use a **local scalar proxy** for how "expensive" or "stiff" the current configuration is: the **force power** S̄ (defined below). **Why S̄ is a proxy for the Fisher metric:** In information geometry, the Fisher metric measures statistical distinguishability; along a dynamical trajectory, the local "cost" or "distance" of a step is related to how much the configuration changes in a mass-weighted sense. The force power S̄ = (1/3*N*) Σᵢ (‖Fᵢ‖²/mᵢ) has dimensions of curvature (force²/mass ∼ energy/length²), which is the same as the second derivative of the potential—i.e. local stiffness. In the Fisher metric for Gaussian or harmonic approximations, the metric tensor involves curvature; S̄ is a scalar that captures this stiffness from the forces alone and is cheap to compute. So we use S̄ as a **computable stand-in** for the local "information cost" or "length" per step. We then require that each integration step contribute a fixed amount to a **squared-length** measure built from S̄ and the thermal scale *k*ₑ*T*, and we deduce the timestep Δ*t* from that condition. The same idea is extended to **charge-equilibration (QEq) tolerance** and to **how fast we advance along a prescribed temperature schedule** (the ramp). The following subsections give the precise definitions, the reasoning behind each formula, and full derivations with every variable defined.
 
 ---
 
@@ -24,7 +24,7 @@ In many computational methods—from molecular dynamics to neural-network traini
 
 **Definition of the force power S̄.** We need a single scalar that measures how "stiff" or "curved" the potential-energy surface is at the current configuration—i.e., how large the forces are in a mass-weighted sense. Define:
 
-**S̄ = (1 / 3*N*) Σᵢ (‖Fᵢ‖² / mᵢ)**
+$$ \bar{S} = \frac{1}{3N} \sum_i \frac{\|{\mathbf{F}}_i\|^2}{m_i} $$
 
 **Variables:**
 - *N* = number of atoms in the system.
@@ -35,9 +35,19 @@ In many computational methods—from molecular dynamics to neural-network traini
 
 So S̄ is the **average over atoms and over the three Cartesian directions** of (force² / mass). Its dimensions are (force²/mass), i.e. (energy/length²) in appropriate units, which is consistent with a "curvature" or "stiffness" (second derivative of potential with respect to position has similar dimensions). When forces are large (e.g. near barriers or during bond breaking), S̄ is high; when the system is calm, S̄ is low. We use S̄ as the local proxy for how much "information" or "cost" one step of dynamics incurs.
 
-**Target: equal thermodynamic length per step.** We want each integration step to contribute the same amount to a **squared thermodynamic length** Δℓ². In a metric that mixes configuration change and thermal scale, a natural scaling is: the squared displacement in configuration space over a timestep Δ*t* is of order (Δ*t*²) × (acceleration²) ∼ (Δ*t*²) × (force/mass)². A mass-weighted squared displacement (related to kinetic and potential curvature) then scales like (Δ*t*²) × S̄. To turn this into a dimensionless or scale-invariant "length squared" we divide by the thermal energy scale *k*ₑ*T* (so that the measure is in units of "information" or "number of thermal fluctuations"). Thus we take the **contribution to squared thermodynamic length from one step** to be:
+**Target: equal thermodynamic length per step.** We want each integration step to contribute the same amount to a **squared thermodynamic length** Δℓ². The reasoning is as follows.
 
-**Δℓ² ∝ (Δ*t*² × S̄) / (*k*ₑ*T*).**
+- **Why the step "cost" scales with (Δt)² × (acceleration)²:** Over a short timestep Δ*t*, the change in position scales as Δ*x* ∼ *a* Δ*t*² (from integrating acceleration twice). So squared displacement scales like (Δ*x*)² ∼ *a*² (Δ*t*)⁴. The acceleration *a* = *F*/*m*, so *a*² ∼ (*F*/*m*)². Thus the raw squared displacement involves (Δ*t*)⁴ and (force/mass)².
+
+- **Why we use a mass-weighted version (S̄):** Different atoms have different masses and forces; a fair "cost" of the step should weight each atom by how much it contributes to the curvature of the potential. Summing (‖*F*ᵢ‖²/*m*ᵢ) over atoms gives a quantity with dimensions of curvature (force²/mass). Averaging over atoms and Cartesian directions yields S̄. So the stiffness-weighted "cost" of the step scales as (Δ*t*)² × S̄ (we use (Δ*t*)² rather than (Δ*t*)⁴ so that the final formula is dimensionally consistent with a squared length per step; the exact power is chosen so that solving for Δ*t* yields a usable timestep rule).
+
+- **Why we need a dimensionless "length squared":** Thermodynamic length in information geometry is invariant under reparameterization and comparable across different temperatures and systems only if the measure is dimensionless or has a fixed unit. So we turn the stiffness-weighted cost (Δ*t*² × S̄) into a dimensionless quantity.
+
+- **Why we divide by *k*ₑ*T*:** The natural energy scale of the system at temperature *T* is *k*ₑ*T*. Dividing (Δ*t*² × S̄) by *k*ₑ*T* gives a ratio that is dimensionless and has the same units as "information" or "number of thermal fluctuations" — i.e. a squared thermodynamic length. So we define the contribution to squared thermodynamic length from one step as:
+
+$$ \Delta\ell^2 \propto \frac{(\Delta t)^2 \,\bar{S}}{k_{\mathrm{e}} T} $$
+
+**How Δℓ is determined:** We require that every step contribute the same Δℓ² (constant). So we set the right-hand side equal to a fixed Δℓ² and solve for Δ*t* (see below). The constant Δℓ is then fixed at **startup** by calibration: we choose the first timestep Δ*t*₀ and the initial S̄₀ and *T*₀, and set Δℓ so that the formula holds for that first step; thereafter Δℓ is unchanged.
 
 **Variables:**
 - **Δ*t*** = integration timestep (in time units, e.g. fs).
@@ -46,15 +56,15 @@ So S̄ is the **average over atoms and over the three Cartesian directions** of 
 
 **Requiring constant length per step.** We require that every step contribute the same Δℓ². So we set:
 
-**(Δ*t*² × S̄) / (*k*ₑ*T*) = Δℓ² = constant.**
+$$ \frac{(\Delta t)^2 \,\bar{S}}{k_{\mathrm{e}} T} = \Delta\ell^2 = \text{constant}. $$
 
 Solving for Δ*t*:
 
-**Δ*t*² = Δℓ² × (*k*ₑ*T*) / S̄  ⇒  Δ*t* = Δℓ × √(*k*ₑ*T* / S̄).**
+$$ (\Delta t)^2 = \Delta\ell^2 \, \frac{k_{\mathrm{e}} T}{\bar{S}} \quad\Rightarrow\quad \Delta t = \Delta\ell \, \sqrt{\frac{k_{\mathrm{e}} T}{\bar{S}}}. $$
 
 We write the constant of proportionality as **Δ*l*** (the "information length scale per step") so that:
 
-**Δ*t* = Δ*l* × √(*k*ₑ*T* / S̄).**
+$$ \Delta t = \Delta\ell \, \sqrt{\frac{k_{\mathrm{e}} T}{\bar{S}}}. $$
 
 **Variables:**
 - **Δ*l*** = constant with dimensions of time (e.g. fs). It is the "information length" scale: it sets how much thermodynamic length we aim to cover per step. Once chosen, it is fixed for the run; all adaptation comes from S̄ and *T*.
@@ -63,7 +73,7 @@ We write the constant of proportionality as **Δ*l*** (the "information length s
 
 **Calibration of Δ*l*.** We do not set Δ*l* by hand. At the **start** of the run we compute S̄ from the initial configuration (call it S̄₀) and the initial target temperature T₀. We want the first timestep to equal a chosen target Δ*t*₀ (e.g. 0.35 fs). So we require Δ*t*₀ = Δ*l* × √(*k*ₑ*T*₀ / S̄₀), hence:
 
-**Δ*l* = Δ*t*₀ / √(*k*ₑ*T*₀ / S̄₀) = Δ*t*₀ × √(S̄₀ / (*k*ₑ*T*₀)).**
+$$ \Delta\ell = \frac{\Delta t_0}{\sqrt{k_{\mathrm{e}} T_0/\bar{S}_0}} = \Delta t_0 \, \sqrt{\frac{\bar{S}_0}{k_{\mathrm{e}} T_0}}. $$
 
 After this one-time calibration, Δ*l* is **fixed**; at every later step we compute S̄ and *T* and set Δ*t* = Δ*l* × √(*k*ₑ*T* / S̄). The timestep is then **clamped** to a configured interval [*dt*_min, *dt*_max] (e.g. [0.25, 1.0] fs) so that we never go below the moderate baseline’s dt in stiff regions nor exceed a safe maximum in very calm regions.
 
@@ -77,7 +87,7 @@ After this one-time calibration, Δ*l* is **fixed**; at every later step we comp
 
 **Cap on the allowed QEq force error.** The contribution of force error to the same squared-length measure (in the same units as Δℓ²) is of order (error in F²/mass) / (*k*ₑ*T*) — i.e. a mass-weighted squared force error scaled by thermal energy. We cap this contribution by a value that allocates a **fraction α_qeq** of the total squared-length budget to QEq. The total budget per step is set by the dt choice: Δ*t*² S̄ / (*k*ₑ*T*) ∝ Δ*l*². So the QEq share is α_qeq × (that budget). Dimensional consistency leads to an allowed **cap** on the QEq-related squared error:
 
-**cap = α_qeq × Δ*l*² × (*k*ₑ*T*) / Δ*t*².**
+$$ \text{cap} = \alpha_{\mathrm{qeq}} \,\Delta\ell^2 \, \frac{k_{\mathrm{e}} T}{(\Delta t)^2}. $$
 
 **Variables:**
 - **α_qeq** = fraction of the information-length budget allocated to QEq error (e.g. 0.65). Larger α_qeq allows more QEq error for a given step; smaller α_qeq keeps forces closer to the tight-tolerance reference.
@@ -96,7 +106,7 @@ After this one-time calibration, Δ*l* is **fixed**; at every later step we comp
 
 **Choosing tolerance from the cap.** We require *err* ≤ cap. Using the fitted model, *err* ≈ 10^(A + B log₁₀(*tol*)) = 10^A × *tol*^B. So we need 10^A × *tol*^B ≤ cap, hence *tol*^B ≤ cap / 10^A. If B < 0, this gives *tol* ≥ (cap / 10^A)^(1/B); we want the **largest** *tol* that still satisfies *err* ≤ cap, so we take:
 
-***tol* = min( *tol*_max, max( *tol*_min, (cap / 10^A)^(1/B) ) ).**
+$$ \mathit{tol} = \min\bigl( \mathit{tol}_{\max},\, \max\bigl( \mathit{tol}_{\min},\, (\text{cap}/10^A)^{1/B} \bigr) \bigr). $$
 
 **Variables:**
 - **tol_min** = lower bound on tolerance (e.g. 10⁻⁶) so we never over-tighten beyond numerical usefulness.
@@ -127,7 +137,7 @@ with *s* capped at *t_ps*. So the virtual clock advances by **more** than the si
 
 and we **floor** speed_factor at 1 so that we never advance the virtual clock **slower** than real time (which would delay completion and would be conservative rather than beneficial). Thus:
 
-**speed_factor = max(1, √(S̄_ref / S̄)).**
+$$ \text{speed\_factor} = \max\left(1,\, \sqrt{\frac{\bar{S}_{\mathrm{ref}}}{\bar{S}}}\right). $$
 
 **Variables:**
 - **S̄** = current force power (same as in the dt formula) in this chunk.
@@ -335,7 +345,9 @@ The **large suite** uses the same seven cases but only **hat** and **constant T*
 | etl_qeq | 0.92× | 0.81× |
 | etl_full | **1.38×** | **1.47×** |
 
-Ramp-enabled runs on the large system complete the schedule in less simulated time: hat etl_full and etl_dt_ramp finish the virtual 10 ps in ~8.7–8.8 ps simulated time; constant T etl_full and etl_dt_ramp in ~7.0–7.2 ps. At 1500 atoms, **ETL(dt)** and **ETL(dt+QEq)** without ramp are **slower** than the moderate baseline (0.89× and 0.92× on hat; 0.83× and 0.81× on constant T). This is because they do not benefit from early exit and the per-step cost (adaptive logic, QEq calibration) is comparable to or slightly higher than the gain from larger dt in calm phases. **ETL(dt+ramp)** is about even with moderate on hat (0.99×) and modestly faster on constant T (1.09×). **ETL(dt+QEq+ramp)** is the only ETL variant that clearly beats moderate at this size: **1.38×** (hat) and **1.47×** (constant T), consistent with the 576-atom trend that the full combination of adaptive dt, adaptive QEq, and early schedule completion delivers the best speedup while preserving fidelity.
+Ramp-enabled runs on the large system complete the schedule in less simulated time: hat etl_full and etl_dt_ramp finish the virtual 10 ps in ~8.7–8.8 ps simulated time; constant T etl_full and etl_dt_ramp in ~7.0–7.2 ps. At 1500 atoms, **ETL(dt)** and **ETL(dt+QEq)** without ramp are **slower** than the moderate baseline (0.89× and 0.92× on hat; 0.83× and 0.81× on constant T). **ETL(dt+ramp)** is about even with moderate on hat (0.99×) and modestly faster on constant T (1.09×). **ETL(dt+QEq+ramp)** is the only ETL variant that clearly beats moderate at this size: **1.38×** (hat) and **1.47×** (constant T), consistent with the 576-atom trend that the full combination of adaptive dt, adaptive QEq, and early schedule completion delivers the best speedup while preserving fidelity.
+
+**Why ETL(dt) and ETL(dt+QEq) are slower than moderate on large systems.** One might expect larger systems to "help ETL shine" because per-step cost (forces, QEq) scales with *N* and adaptive dt could save more steps. The catch is that **ETL(dt)** and **ETL(dt+QEq)** *do not use the ramp*: they always run the **full 10 ps** of simulated time, just like the moderate baseline. So they take the same number of steps (or more, if dt stays conservative) as moderate. On top of that, each step pays extra cost: (i) computing S̄ and applying the dt formula, (ii) for etl_qeq, sentinel calibration every 100 chunks (extra force evaluations at loose and tight tolerance). That **per-step overhead** scales with *N* too. At 576 atoms the overhead is small and the gain from slightly larger dt in calm phases still wins; at 1500 atoms the overhead is larger and there is no early exit to offset it, so **etl_dt** and **etl_qeq** end up slower than moderate. **Large systems do help ETL when the full stack is used:** **etl_full** (adaptive dt + adaptive QEq + ramp) beats moderate and even beats the aggressive baseline on 1500-atom constant T, because the **ramp** lets the run exit after ~7 ps of simulated time instead of 10 ps. So it is the **combination** of adaptive dt, adaptive QEq, *and* early schedule completion that makes ETL scale well to larger *N*; without the ramp, the adaptive variants do not get that structural advantage.
 
 **Stability (1500 atoms).** Energy, charge, and pressure trajectories in the large-suite logs are stable (see §3.5): no runaway; etotal and pressure ranges reflect the temperature schedule (hat vs constant T), and charge statistics in ETL runs match the 576-atom fidelity ranges.
 
