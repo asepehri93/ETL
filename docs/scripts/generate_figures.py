@@ -87,30 +87,37 @@ def fig01_control_loop():
     import matplotlib.pyplot as plt
     from matplotlib.patches import FancyBboxPatch
 
-    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
+    fig, ax = plt.subplots(1, 1, figsize=(8, 5.5))
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 6)
     ax.axis("off")
 
     style = dict(boxstyle="round,pad=0.3", facecolor="lightgray", edgecolor="black", linewidth=1.5)
-    # Boxes first (so text appears on top)
-    ax.add_patch(FancyBboxPatch((1, 3.8), 2, 1.4, **style))
-    ax.add_patch(FancyBboxPatch((4, 3.8), 2, 1.4, **style))
-    ax.add_patch(FancyBboxPatch((7, 3.8), 2, 1.4, **style))
-    ax.add_patch(FancyBboxPatch((4, 1.5), 2, 1.4, **style))
-    ax.add_patch(FancyBboxPatch((7, 1.5), 2, 1.4, **style))
-    # Labels
+    # Boxes: (x, y) = lower-left, width, height. Top row y=3.8, bottom row y=1.5
+    ax.add_patch(FancyBboxPatch((1, 3.8), 2, 1.4, **style))   # Trajectory
+    ax.add_patch(FancyBboxPatch((4, 3.8), 2, 1.4, **style))   # S̄,T → dt formula
+    ax.add_patch(FancyBboxPatch((7, 3.8), 2, 1.4, **style))   # Δt
+    ax.add_patch(FancyBboxPatch((4, 1.5), 2, 1.4, **style))   # QEq cap → tol
+    ax.add_patch(FancyBboxPatch((7, 1.5), 2, 1.4, **style))   # Virtual clock
+    # Labels (centers: x=2,5,8 for cols; y=4.5 top, 2.2 bottom)
     ax.text(2, 4.5, "Trajectory\nF, T", ha="center", va="center", fontsize=10)
     ax.text(5, 4.5, r"$\bar{S}$, $T$" + "\n→ dt formula", ha="center", va="center", fontsize=10)
     ax.text(8, 4.5, r"$\Delta t$", ha="center", va="center", fontsize=11)
     ax.text(5, 2.2, "QEq cap → tol", ha="center", va="center", fontsize=9)
     ax.text(8, 2.2, "Virtual clock\nspeed_factor", ha="center", va="center", fontsize=9)
-    # Arrows
-    ax.annotate("", xy=(3.9, 4.5), xytext=(2.2, 4.5), arrowprops=dict(arrowstyle="->", lw=1.5))
-    ax.annotate("", xy=(6.9, 4.5), xytext=(5.2, 4.5), arrowprops=dict(arrowstyle="->", lw=1.5))
-    ax.annotate("", xy=(7, 4.2), xytext=(5, 3.8), arrowprops=dict(arrowstyle="->", lw=1))
-    ax.annotate("", xy=(7, 2.2), xytext=(5.2, 2.2), arrowprops=dict(arrowstyle="->", lw=1))
-    ax.text(5, 0.8, "Fig. 1: ETL control loop (dt, QEq budget, optional ramp)", fontsize=9, ha="center")
+    # Arrows: short segments in the gap between boxes so they don't overlap text
+    # Top row: Trajectory → formula → Δt
+    ax.annotate("", xy=(3.55, 4.5), xytext=(2.45, 4.5),
+                arrowprops=dict(arrowstyle="->", lw=1.8, color="black"))
+    ax.annotate("", xy=(6.55, 4.5), xytext=(5.45, 4.5),
+                arrowprops=dict(arrowstyle="->", lw=1.8, color="black"))
+    # Bottom row: QEq cap → Virtual clock
+    ax.annotate("", xy=(6.55, 2.2), xytext=(5.45, 2.2),
+                arrowprops=dict(arrowstyle="->", lw=1.8, color="black"))
+    # Δt feeds into QEq cap (cap ∝ 1/Δt²): straight diagonal from Δt bottom to QEq top
+    ax.annotate("", xy=(5.45, 2.9), xytext=(7.35, 3.82),
+                arrowprops=dict(arrowstyle="->", lw=1.2, color="black"))
+    ax.text(5, 0.7, "Fig. 1: ETL control loop (dt, QEq budget, optional ramp)", fontsize=9, ha="center")
     fig.tight_layout()
     fig.savefig(os.path.join(FIGURES_DIR, "fig01_control_loop.png"), dpi=150, bbox_inches="tight")
     plt.close()

@@ -158,7 +158,7 @@ The overall ETL control loop—trajectory and forces feeding S̄ and *T* into th
 
 ![Fig. 1: ETL control loop](figures/fig01_control_loop.png)
 
-*Figure 1. ETL control loop. Trajectory (F, T) → S̄ and T → dt formula → Δt; QEq cap → tol; optional virtual clock (speed_factor) → early exit.*
+*Figure 1. ETL control loop. **Top row:** The trajectory supplies forces (F) and target temperature (T). From these we compute the force power S̄ and use S̄ and T in the dt formula to obtain the integration timestep Δt. **Bottom row:** The QEq tolerance budget (cap) sets the charge-equilibration tolerance (*tol*); the cap depends on Δt (cap ∝ 1/Δt²), so tolerance is coupled to the timestep. The virtual clock advances by speed_factor and triggers early exit when the schedule is complete. Together, adaptive dt, adaptive QEq, and the optional ramp form the full ETL control loop.*
 
 ---
 
