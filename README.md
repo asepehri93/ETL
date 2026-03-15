@@ -53,6 +53,8 @@ $$ \Delta\ell = \frac{\Delta t_0}{\sqrt{k_{\mathrm{e}} T_0/\bar{S}_0}} = \Delta 
 
 After this one-time calibration, Δ*l* is **fixed**; at every later step we compute S̄ and *T* and set Δ*t* = Δ*l* × √(*k*ₑ*T* / S̄). The timestep is then **clamped** to a configured interval [*dt*_min, *dt*_max] (e.g. [0.25, 1.0] fs) so that we never go below the moderate baseline's dt in stiff regions nor exceed a safe maximum in very calm regions.
 
+**Fixed vs. updated Δ*l*.** Defining Δ*l* once from the initial configuration keeps the target "length per step" constant and avoids drift: every step is compared to the same budget. Updating Δ*l* during the run (e.g. from a running average of S̄) could in principle let the target length track a changing difficulty, but would redefine the budget over time and could make adaptation inconsistent or biased toward later phases. In our implementation we keep Δ*l* fixed so that all adaptation comes from the local S̄ and *T*; the clamp [*dt*_min, *dt*_max] then bounds how far dt can deviate from the moderate baseline. This choice is conservative and may limit how much dt can grow in very calm regions if the initial calibration was done in a stiffer state; the trade-off is simplicity and a single, well-defined length scale for the whole run.
+
 ---
 
 ### 1.3 QEq Tolerance Budget
@@ -68,7 +70,7 @@ $$ \text{cap} = \alpha_{\mathrm{qeq}} \Delta\ell^2 \frac{k_{\mathrm{e}} T}{(\Del
 **Variables:**
 - **α_qeq** = fraction of the information-length budget allocated to QEq error (e.g. 0.65). Larger α_qeq allows more QEq error for a given step; smaller α_qeq keeps forces closer to the tight-tolerance reference.
 - **Δ*l*** = same information-length scale as in the dt formula (fixed at startup).
-- **Δ*t*** = current timestep from the ETL formula. Because cap ∝ 1/Δ*t*², when Δ*t* is **large** (calm phase) cap is **smaller**, so we require smaller force error and thus **tighter** *tol*; when Δ*t* is **small** (stiff phase) cap is **larger**, so we can allow larger error and **looser** *tol*. The timestep and tolerance are thus coupled in a consistent way.
+- **Δ*t*** = current timestep from the ETL formula. Because cap ∝ 1/Δ*t*², when Δ*t* is **large** (calm phase) cap is **smaller**, so we require smaller force error and thus **tighter** *tol*; when Δ*t* is **small** (stiff phase) cap is **larger**, so we can allow larger error and **looser** *tol*. That can seem counterintuitive (tight QEq when the system is "easy," loose when it is "hard"), but it is consistent with the budget: we bound the *contribution* of QEq error to the step's thermodynamic length. A given force error over a **long** step (large Δ*t*) would produce a larger squared displacement and thus a larger contribution to length, so we tighten *tol* in calm phases to keep that contribution within the budget; over a **short** step the same error contributes less, so we can afford looser *tol* in stiff phases. The timestep and tolerance are thus coupled in a consistent way.
 - **cap** has dimensions consistent with (force error)²/(mass × *k*ₑ*T*), i.e. the same as the squared-length contribution from forces.
 
 **Force error vs. tolerance: we learn it.** We do not have an analytic formula for the force error as a function of *tol*. So we **learn** a simple model by **sentinel calibration**: periodically we evaluate forces at a **loose** tolerance *tol*_loose and at a **tight** tolerance *tol*_tight, compute the difference in an S̄-like norm (mass-weighted squared force difference), and call that the "error" *err* for *tol*_loose. Repeating for several (*tol*, *err*) pairs we fit:
@@ -117,9 +119,7 @@ $$ \mathrm{speed\_factor} = \max\left(1, \sqrt{\frac{\bar{S}_{\mathrm{ref}}}{\ba
 - **S̄** = current force power (same as in the dt formula) in this chunk.
 - **S̄_ref** = reference force power, set once at startup from an estimate of "hot-phase" or typical high S̄ (e.g. 3.5 × S̄ at cold start). In **calm** phases S̄ < S̄_ref so speed_factor > 1; in **stiff** phases S̄ ≥ S̄_ref so speed_factor = 1.
 
-**Early exit.** When *s* ≥ *t_ps*, the full schedule has been traversed; we **exit** the run even if the simulated time is below *t_ps*. That is the source of wall-time savings for ramp-enabled runs.
-
-**Why constant-T benefits most (for ramp and overall speedup).** For a constant-T schedule, T(s) = 300 K for all *s*. The system is at 300 K throughout, so S̄ stays relatively low (no heating/cooling stress). Hence S̄ < S̄_ref **most of the time**, so speed_factor > 1 most of the time and the virtual clock runs **ahead** of simulated time. In practice the virtual clock reaches 10 ps after only about **5.8–6.4 ps** of simulated time—we do roughly 6 ps of dynamics and declare the 10 ps schedule complete. That is why constant-T shows the largest ETL speedups (1.59–1.81× vs moderate); the gain comes mainly from **early exit**. Because S̄ and dt vary little on constant T, the cap (and thus the allowed QEq tolerance) also varies little, so adaptive QEq has limited room to relax—tol stays in a narrow band and QEq savings remain modest there. Schedules with both calm and stiff phases (e.g. hat) give more variation in dt and cap, so more "activity" for adaptive QEq; the trade-off is that early exit is less (we run more of the 10 ps in the hot phase). For hat and milder schedules, only the cold phases are easy; in the hot phase S̄ ≥ S̄_ref and speed_factor = 1, so we exit after ~7.9–8.4 ps simulated time when the virtual clock reaches 10 ps.
+**Early exit.** When *s* ≥ *t_ps*, the full schedule has been traversed; we **exit** the run even if the simulated time is below *t_ps*. That is the source of wall-time savings for ramp-enabled runs. For hat and milder schedules, only the cold phases are easy; in the hot phase S̄ ≥ S̄_ref and speed_factor = 1, so we exit after ~7.9–8.4 ps simulated time when the virtual clock reaches 10 ps.
 
 **Figure 2** illustrates the virtual schedule clock: simulated time *t* vs virtual time *s*. When the system is calm, *s* advances faster than *t* (curve above the diagonal); the run exits when *s* reaches the schedule duration (e.g. 10 ps), often after less simulated time.
 
@@ -129,28 +129,11 @@ $$ \mathrm{speed\_factor} = \max\left(1, \sqrt{\frac{\bar{S}_{\mathrm{ref}}}{\ba
 
 ---
 
-### 1.5 Decoupling Timestep from QEq Noise (S̄_tight)
-
-**Problem.** When adaptive QEq is enabled, we intentionally use a **looser** tolerance in calm phases to save QEq cost. The forces returned by the solver are then noisier (larger error). The force power **S̄** is computed from these same forces, so in calm phases S̄ would be **inflated** by the QEq error: S̄ = (1/3*N*) Σᵢ (‖Fᵢ‖²/mᵢ) includes contributions from both the "true" forces and the error. If we fed this inflated S̄ into the timestep formula Δ*t* = Δ*l* √(*k*ₑ*T* / S̄), we would **shrink** Δ*t* unnecessarily—the timestep controller would think the landscape is stiffer than it really is and would reduce the step size, wasting cost and partly undoing the benefit of adaptive QEq.
-
-**Solution: use S̄ from tight-tolerance forces.** We **decouple** the S̄ used **for the dt formula** from the operating tolerance. Specifically, we use a value **S̄_tight** computed from forces obtained at **converged (tight-tolerance)** QEq. Those forces are already computed during **sentinel calibration** (when we evaluate forces at both loose and tight tolerance to fit the error model). We cache the S̄ value from the last tight-tolerance evaluation and **update it every calibration**. The timestep controller then uses **S̄_tight** instead of the raw S̄ from the current (possibly loose) step. So the curvature signal seen by the dt formula is **stable** and reflects the true stiffness of the potential, not the QEq noise; we do not over-shrink Δ*t* when QEq is loose.
-
-**Variables:**
-- **S̄_tight** = force power computed from forces at tight QEq tolerance (e.g. 10⁻⁵ or 10⁻⁶). Used only as the input to the dt formula when adaptive QEq is on. Updated every time sentinel calibration runs.
-
-The overall ETL control loop—trajectory and forces feeding S̄ and *T* into the dt formula, QEq budget setting tolerance, and the optional virtual clock driving early exit—is summarized in **Figure 1**.
-
-![Fig. 1: ETL control loop (dt, QEq budget, optional ramp).](docs/figures/fig01_control_loop.png)
-
-*Figure 1. ETL control loop. **Top row:** The trajectory supplies forces (F) and target temperature (T). From these we compute the force power S̄ and use S̄ and T in the dt formula to obtain the integration timestep Δt. **Bottom row:** The QEq tolerance budget (cap) sets the charge-equilibration tolerance (*tol*); the cap depends on Δt (cap ∝ 1/Δt²), so tolerance is coupled to the timestep. The virtual clock advances by speed_factor and triggers early exit when the schedule is complete. Together, adaptive dt, adaptive QEq, and the optional ramp form the full ETL control loop.*
-
----
-
 ## 2. Methods
 
 ### 2.1 Simulation Setup
 
-**Systems.** Two system sizes were used. **(1) 576 atoms** (192 Si, 384 O): amorphous SiO₂ in a periodic box, representative of the smaller-cell setup used for the three-schedule (hat, milder, constant T) suite; single-run wall time is on the order of tens of minutes to about an hour so that the full 21-run suite is tractable. **(2) 1500 atoms**: same chemistry and force field, created by replicating the 576-atom structure along one axis and trimming to 1500 atoms so that the same ETL methodology can be tested at a larger size; wall times per run are roughly two to four times longer than 576 atoms, so the large suite was run for **hat and constant T only** (14 runs total). In both cases the composition is SiO₂ and the ReaxFF force field is the same (Si, O types).
+**Systems.** Two system sizes were used. Two system sizes were used. **(1) 576 atoms** (192 Si, 384 O): amorphous SiO₂ in a periodic box, representative of the smaller-cell setup used for the three-schedule (hat, milder, constant T) suite; single-run wall time is on the order of tens of minutes to about an hour so that the full 21-run suite is tractable. **(2) 1500 atoms**: same chemistry and force field, created by replicating the 576-atom structure along one axis and trimming to 1500 atoms so that the same ETL methodology can be tested at a larger size; wall times per run are roughly two to four times longer than 576 atoms, so the large suite was run for **hat and constant T only** (14 runs total). In both cases the composition is SiO₂ and the ReaxFF force field is the same (Si, O types).
 
 **Ensemble and thermostat.** All runs use the **NVT** ensemble with a **Langevin thermostat**, damping time 100 fs. The thermostat maintains the target temperature along the schedule; the fixed damping time is short enough to track the ramp but can cause lag during steep heat-up and cool-down segments.
 
@@ -158,7 +141,15 @@ The overall ETL control loop—trajectory and forces feeding S̄ and *T* into th
 
 **Trajectory and output.** Snapshot interval is 0.05 ps to balance I/O cost and resolution. Frames are used for RDF and coordination analysis and for visual inspection. Each run writes a per-chunk log (etl_log.csv for ETL runs or equivalent diagnostics for baselines), wall_time.txt, and dump frames.
 
-### 2.2 Temperature Schedules
+### 2.2 Decoupling Timestep from QEq Noise (S̄_tight)
+
+When adaptive QEq is enabled, we use a looser tolerance in calm phases to save cost; the forces returned are noisier. The force power **S̄** is computed from these forces, so S̄ would be **inflated** by QEq error and would shrink Δ*t* unnecessarily if fed into the dt formula. We **decouple** the S̄ used **for the dt formula** from the operating tolerance by using **S̄_tight**—force power from forces at **tight** QEq tolerance—computed during **sentinel calibration** and cached until the next calibration. The timestep controller then uses S̄_tight so the curvature signal reflects the true stiffness, not QEq noise. The overall ETL control loop (trajectory → S̄ and *T* → dt; QEq budget → *tol*; optional virtual clock → early exit) is summarized in **Figure 1**.
+
+![Fig. 1: ETL control loop (dt, QEq budget, optional ramp).](docs/figures/fig01_control_loop.png)
+
+*Figure 1. ETL control loop. **Top row:** Forces (F) and target temperature (T) → force power S̄ → dt formula → integration timestep Δt. **Bottom row:** QEq cap (∝ 1/Δt²) sets tolerance *tol*; virtual clock advances by speed_factor and triggers early exit when the schedule is complete.*
+
+### 2.3 Temperature Schedules
 
 Three schedule categories were run, each with total schedule duration **10 ps** (virtual time):
 
@@ -168,7 +159,7 @@ Three schedule categories were run, each with total schedule duration **10 ps** 
 | **Milder** | 300 K → 2000 K → 300 K; symmetric 25% / 25% / 25% / 25%. Intermediate peak temperature. |
 | **Constant T** | T(s) = 300 K for all *s*. The schedule is "10 ps of process time at 300 K"; no temperature change, but the virtual clock still runs from 0 to 10 ps. |
 
-### 2.3 Baselines and ETL Variants (Seven Cases per Schedule)
+### 2.4 Baselines and ETL Variants (Seven Cases per Schedule)
 
 For each schedule we run **seven cases**. The same set is used for both 576-atom and 1500-atom suites; the large suite was run only for hat and constant T schedules.
 
@@ -184,7 +175,7 @@ For each schedule we run **seven cases**. The same set is used for both 576-atom
 
 Step-savings percentage (reported in logs) is computed versus a fixed 0.1 fs reference so that ETL runs can be compared in a CHO-style "steps saved vs 0.1 fs" sense.
 
-### 2.4 Techniques Implemented
+### 2.5 Techniques Implemented
 
 - **Sentinel calibration**: Every 100 chunks we evaluate forces at loose and tight QEq tolerance, fit a log-linear model (tolerance → force error in an S̄-like norm), and use it to choose the largest tolerance consistent with the ETL budget.
 - **Δ*l* auto-calibration**: At startup we compute S̄ from the initial state and set Δ*l* so that Δ*t* equals the target (e.g. 0.35 fs) there. Δ*l* is then fixed for the run.
@@ -193,7 +184,7 @@ Step-savings percentage (reported in logs) is computed versus a fixed 0.1 fs ref
 - **Ramp (virtual schedule clock)**: Virtual clock advances by chunk_wall_ps × speed_factor with speed_factor = max(1, √(S̄_ref / S̄)). Early exit when virtual clock ≥ t_ps.
 - **Langevin seed**: Each time the Langevin fix is redefined (e.g. when target T changes), the random seed is incremented to avoid correlated random forces and thermal runaway.
 
-### 2.5 Data Collected
+### 2.6 Data Collected
 
 - **etl_log.csv**: One row per chunk. Fields include dt, tol, S̄, T_target, T_measured, P, PE, KE, etotal, schedule_ps, ramp_progress_ps (when ramp is enabled), step_savings_pct (vs 0.1 fs), and per-type charge means and q_std.
 - **wall_time.txt**: Total wall-clock time in seconds for the run.
@@ -219,7 +210,9 @@ Wall times for the 576-atom suite are as follows.
 | etl_qeq | 2668 | 2873 | 2638 |
 | etl_full | 2314 | 2322 | **1847** |
 
-Ramp-enabled runs (etl_dt_ramp, etl_full) complete the full 10 ps **schedule** (virtual time) in **less** simulated time: ~8.35–8.40 ps for hat, ~7.91 ps for milder, and ~5.82–6.36 ps for constant T. Early exit is the main source of wall-time savings for these variants; constant T benefits most because the system is calm throughout, so the virtual clock runs ahead fastest.
+Ramp-enabled runs (etl_dt_ramp, etl_full) complete the full 10 ps **schedule** (virtual time) in **less** simulated time: ~8.35–8.40 ps for hat, ~7.91 ps for milder, and ~5.82–6.36 ps for constant T. Early exit is the main source of wall-time savings for these variants.
+
+**Why constant-T gives the largest ETL speedups.** For a constant-T schedule the system is at 300 K throughout, so S̄ stays relatively low and S̄ < S̄_ref most of the time; speed_factor > 1 and the virtual clock runs ahead of simulated time. In practice the virtual clock reaches 10 ps after only about 5.8–6.4 ps of simulated time—we do roughly 6 ps of dynamics and declare the 10 ps schedule complete. That is why constant-T shows the largest ETL speedups (1.59–1.81× vs moderate); the gain comes mainly from **early exit**. Because S̄ and dt vary little on constant T, the cap (and thus the allowed QEq tolerance) also varies little, so adaptive QEq has limited room to relax there; schedules with both calm and stiff phases (e.g. hat) give more variation in dt and cap and thus more "activity" for adaptive QEq, at the trade-off that early exit is less (we run more of the 10 ps in the hot phase).
 
 **Figure 3** shows wall time by case and schedule for both 576 and 1500 atoms.
 
@@ -324,7 +317,7 @@ The **large suite** uses the same seven cases but only **hat** and **constant T*
 
 Ramp-enabled runs on the large system complete the schedule in less simulated time: hat etl_full and etl_dt_ramp finish the virtual 10 ps in ~8.7–8.8 ps simulated time; constant T etl_full and etl_dt_ramp in ~7.0–7.2 ps. At 1500 atoms, **ETL(dt)** and **ETL(dt+QEq)** without ramp are **slower** than the moderate baseline (0.89× and 0.92× on hat; 0.83× and 0.81× on constant T). **ETL(dt+ramp)** is about even with moderate on hat (0.99×) and modestly faster on constant T (1.09×). **ETL(dt+QEq+ramp)** is the only ETL variant that clearly beats moderate at this size: **1.38×** (hat) and **1.47×** (constant T), consistent with the 576-atom trend that the full combination of adaptive dt, adaptive QEq, and early schedule completion delivers the best speedup while preserving fidelity.
 
-**Why ETL(dt) and ETL(dt+QEq) are slower than moderate on large systems.** One might expect larger systems to “help ETL shine” because per-step cost (forces, QEq) scales with *N* and adaptive dt could save more steps. The catch is that **ETL(dt)** and **ETL(dt+QEq)** *do not use the ramp*: they always run the **full 10 ps** of simulated time, just like the moderate baseline. So they take the same number of steps (or more, if dt stays conservative) as moderate. On top of that, each step pays extra cost: (i) computing S̄ and applying the dt formula, (ii) for etl_qeq, sentinel calibration every 100 chunks (extra force evaluations at loose and tight tolerance). That **per-step overhead** scales with *N* too. At 576 atoms the overhead is small and the gain from slightly larger dt in calm phases still wins; at 1500 atoms the overhead is larger and there is no early exit to offset it, so **etl_dt** and **etl_qeq** end up slower than moderate. **Large systems do help ETL when the full stack is used:** **etl_full** (adaptive dt + adaptive QEq + ramp) beats moderate and even beats the aggressive baseline on 1500-atom constant T, because the **ramp** lets the run exit after ~7 ps of simulated time instead of 10 ps. So it is the **combination** of adaptive dt, adaptive QEq, *and* early schedule completion that makes ETL scale well to larger *N*; without the ramp, the adaptive variants do not get that structural advantage. In our runs we did not see QEq savings grow with system size on their own—at 1500 atoms etl_qeq (no ramp) is slower than moderate; the benefit at large *N* comes from early exit and adaptive dt, not from QEq activation alone.
+**Why ETL(dt) and ETL(dt+QEq) are slower than moderate on large systems.** One might expect larger systems to “help ETL shine” because per-step cost (forces, QEq) scales with *N* and adaptive dt could save more steps. ETL(dt) and ETL(dt+QEq) do not use the ramp, so they run the full 10 ps of simulated time like the moderate baseline. The timestep is clamped to [*dt*_min, *dt*_max] (e.g. [0.25, 1.0] fs): the **minimum** is 0.25 fs so in stiff phases we never take more steps per unit time than moderate; in calm phases dt can rise toward 1.0 fs, so step count can be similar or lower than moderate. The lag comes from **per-step overhead**—computing S̄, applying the dt formula, and for etl_qeq sentinel calibration every 100 chunks—which scales with *N*. At 576 atoms the overhead is small and the gain from slightly larger dt in calm phases still wins; at 1500 atoms the overhead is larger and there is no early exit to offset it, so **etl_dt** and **etl_qeq** end up slower than moderate. **Large systems do help ETL when the full stack is used:** **etl_full** (adaptive dt + adaptive QEq + ramp) beats moderate and even beats the aggressive baseline on 1500-atom constant T, because the **ramp** lets the run exit after ~7 ps of simulated time instead of 10 ps. So it is the **combination** of adaptive dt, adaptive QEq, *and* early schedule completion that makes ETL scale well to larger *N*; without the ramp, the adaptive variants do not get that structural advantage. In our runs we did not see QEq savings grow with system size on their own—at 1500 atoms etl_qeq (no ramp) is slower than moderate; the benefit at large *N* comes from early exit and adaptive dt, not from QEq activation alone.
 
 **Stability (1500 atoms).** Energy, charge, and pressure trajectories in the large-suite logs are stable (see §3.5): no runaway; etotal and pressure ranges reflect the temperature schedule (hat vs constant T), and charge statistics in ETL runs match the 576-atom fidelity ranges.
 
@@ -364,7 +357,7 @@ On **576 atoms**, all ETL variants are at or above moderate; etl_dt_ramp and etl
 
 ### 3.9 Figures
 
-Figures 1–4 are embedded in the discussion above (§1.4, §1.5, §3.1, §3.3). They are generated by `docs/scripts/generate_figures.py` (run from repo root with the project venv). Additional analysis figures—simulated time vs wall time, controller behavior, fidelity trajectories, temperature schedule schematic, dashboards—are shown with captions in [Supplementary_Figures.md](docs/Supplementary_Figures.md). All figures are produced from `etl_log.csv` and `wall_time.txt` in the suite output directories.
+Figures 1–4 are embedded in the discussion above (Fig. 1 in §2.2, Fig. 2 in §1.4, Figs. 3–4 in §3.1 and §3.3). They are generated by `docs/scripts/generate_figures.py` (run from repo root with the project venv). Additional analysis figures—simulated time vs wall time, controller behavior, fidelity trajectories, temperature schedule schematic, dashboards—are shown with captions in [Supplementary_Figures.md](docs/Supplementary_Figures.md). All figures are produced from `etl_log.csv` and `wall_time.txt` in the suite output directories.
 
 ---
 
