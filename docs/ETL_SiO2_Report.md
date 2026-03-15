@@ -16,64 +16,34 @@ In many computational methods—from molecular dynamics to neural-network traini
 
 **From equilibrium paths to nonequilibrium trajectories.** In molecular dynamics we do not follow an equilibrium path: the system is out of equilibrium and evolves according to equations of motion. We can still ask: along the **trajectory** in configuration (and momentum) space, can we define a local measure of "distance" or "cost" per step that plays a role analogous to thermodynamic length? If so, choosing step sizes so that **each step contributes the same amount to that measure** would correspond to "equal thermodynamic length" along the trajectory: we take **larger steps when the local cost is low** (calm regions) and **smaller steps when the local cost is high** (stiff or rapidly changing regions), without hand-tuning. That is the core of ETL in MD.
 
-**What we use in practice.** We do not compute the full Fisher metric along the MD trajectory. Instead we use a **local scalar proxy** for how "expensive" or "stiff" the current configuration is: the **force power** S̄ (defined below). **Why S̄ is a proxy for the Fisher metric:** In information geometry, the Fisher metric measures statistical distinguishability; along a dynamical trajectory, the local "cost" or "distance" of a step is related to how much the configuration changes in a mass-weighted sense. The force power S̄ = (1/3*N*) Σᵢ (‖Fᵢ‖²/mᵢ) has dimensions of curvature (force²/mass ∼ energy/length²), which is the same as the second derivative of the potential—i.e. local stiffness. In the Fisher metric for Gaussian or harmonic approximations, the metric tensor involves curvature; S̄ is a scalar that captures this stiffness from the forces alone and is cheap to compute. So we use S̄ as a **computable stand-in** for the local "information cost" or "length" per step. We then require that each integration step contribute a fixed amount to a **squared-length** measure built from S̄ and the thermal scale *k*ₑ*T*, and we deduce the timestep Δ*t* from that condition. The same idea is extended to **charge-equilibration (QEq) tolerance** and to **how fast we advance along a prescribed temperature schedule** (the ramp). The following subsections give the precise definitions, the reasoning behind each formula, and full derivations with every variable defined.
+**What we use in practice.** We do not compute the full Fisher metric along the MD trajectory. Along the path, the local "cost" of a step is tied to how much the configuration changes in a mass-weighted sense; in the Fisher metric, distance is tied to curvature and statistical distinguishability, and in Gaussian or harmonic limits the metric tensor involves the curvature of the potential. The **force power** S̄—the mass-weighted average of squared force over atoms and directions—has dimensions of curvature (force²/mass ∼ energy/length²), i.e. the same as the second derivative of the potential. We therefore take S̄ as a **computable proxy for the local Fisher metric** along the trajectory and define the squared thermodynamic length contributed by one step in terms of S̄, the timestep Δ*t*, and the thermal scale *k*ₑ*T*. The same idea is later extended to charge-equilibration tolerance and to the virtual schedule clock (ramp). The following subsections give the precise definitions and derivations.
 
 ---
 
 ### 1.2 Adaptive Timestep (dt): Force Power S̄ and the Timestep Formula
 
-**Definition of the force power S̄.** We need a single scalar that measures how "stiff" or "curved" the potential-energy surface is at the current configuration—i.e., how large the forces are in a mass-weighted sense. Define:
+The force power S̄ is the average over atoms and Cartesian directions of (force²/mass), so it has dimensions of curvature and is high where the potential is stiff and low where the system is calm:
 
 $$ \bar{S} = \frac{1}{3N} \sum_i \frac{\|{\mathbf{F}}_i\|^2}{m_i} $$
 
-**Variables:**
-- *N* = number of atoms in the system.
-- *i* = atom index; the sum runs over all atoms.
-- **Fᵢ** = force vector on atom *i* (from the potential); dimensions of force.
-- **mᵢ** = mass of atom *i*.
-- **‖Fᵢ‖²** = squared Euclidean norm of Fᵢ.
+(*N* = number of atoms; **Fᵢ** = force on atom *i*; **mᵢ** = mass of atom *i*.)
 
-So S̄ is the **average over atoms and over the three Cartesian directions** of (force² / mass). Its dimensions are (force²/mass), i.e. (energy/length²) in appropriate units, which is consistent with a "curvature" or "stiffness" (second derivative of potential with respect to position has similar dimensions). When forces are large (e.g. near barriers or during bond breaking), S̄ is high; when the system is calm, S̄ is low. We use S̄ as the local proxy for how much "information" or "cost" one step of dynamics incurs.
+**Target: equal thermodynamic length per step.** We want each step to contribute the same squared thermodynamic length Δℓ². Over a short timestep Δ*t*, displacement scales as Δ*x* ∼ *a* Δ*t*² (*a* = *F*/*m*); a curvature-weighted cost scales as (Δ*t*)² S̄. Dividing by *k*ₑ*T* gives a dimensionless squared length. So Δℓ² ∝ (Δ*t*² S̄)/(*k*ₑ*T*). Setting this constant and solving for Δ*t* gives
 
-**Target: equal thermodynamic length per step.** We want each integration step to contribute the same amount to a **squared thermodynamic length** Δℓ². The reasoning is as follows.
+$$ \frac{(\Delta t)^2 \bar{S}}{k_{\mathrm{e}} T} = \Delta\ell^2 \quad\Rightarrow\quad \Delta t = \Delta\ell \sqrt{\frac{k_{\mathrm{e}} T}{\bar{S}}}. $$
 
-- **Why the step "cost" scales with (Δt)² × (acceleration)²:** Over a short timestep Δ*t*, the change in position scales as Δ*x* ∼ *a* Δ*t*² (from integrating acceleration twice). So squared displacement scales like (Δ*x*)² ∼ *a*² (Δ*t*)⁴. The acceleration *a* = *F*/*m*, so *a*² ∼ (*F*/*m*)². Thus the raw squared displacement involves (Δ*t*)⁴ and (force/mass)².
-
-- **Why we use a mass-weighted version (S̄):** Different atoms have different masses and forces; a fair "cost" of the step should weight each atom by how much it contributes to the curvature of the potential. Summing (‖*F*ᵢ‖²/*m*ᵢ) over atoms gives a quantity with dimensions of curvature (force²/mass). Averaging over atoms and Cartesian directions yields S̄. So the stiffness-weighted "cost" of the step scales as (Δ*t*)² × S̄ (we use (Δ*t*)² rather than (Δ*t*)⁴ so that the final formula is dimensionally consistent with a squared length per step; the exact power is chosen so that solving for Δ*t* yields a usable timestep rule).
-
-- **Why we need a dimensionless "length squared":** Thermodynamic length in information geometry is invariant under reparameterization and comparable across different temperatures and systems only if the measure is dimensionless or has a fixed unit. So we turn the stiffness-weighted cost (Δ*t*² × S̄) into a dimensionless quantity.
-
-- **Why we divide by *k*ₑ*T*:** The natural energy scale of the system at temperature *T* is *k*ₑ*T*. Dividing (Δ*t*² × S̄) by *k*ₑ*T* gives a ratio that is dimensionless and has the same units as "information" or "number of thermal fluctuations" — i.e. a squared thermodynamic length. So we define the contribution to squared thermodynamic length from one step as:
-
-$$ \Delta\ell^2 \propto \frac{(\Delta t)^2 \,\bar{S}}{k_{\mathrm{e}} T} $$
-
-**How Δℓ is determined:** We require that every step contribute the same Δℓ² (constant). So we set the right-hand side equal to a fixed Δℓ² and solve for Δ*t* (see below). The constant Δℓ is then fixed at **startup** by calibration: we choose the first timestep Δ*t*₀ and the initial S̄₀ and *T*₀, and set Δℓ so that the formula holds for that first step; thereafter Δℓ is unchanged.
+Δℓ is fixed at startup by calibration (see below).
 
 **Variables:**
 - **Δ*t*** = integration timestep (in time units, e.g. fs).
-- **kₑ** = Boltzmann’s constant (in energy per temperature, e.g. kcal/(mol·K) or appropriate MD units).
-- **T** = current (target) temperature (in K). The factor *k*ₑ*T* is the thermal energy scale; it sets how large a "unit" of fluctuation is, so that at high T we do not over-penalize steps (see below).
-
-**Requiring constant length per step.** We require that every step contribute the same Δℓ². So we set:
-
-$$ \frac{(\Delta t)^2 \,\bar{S}}{k_{\mathrm{e}} T} = \Delta\ell^2 = \text{constant}. $$
-
-Solving for Δ*t*:
-
-$$ (\Delta t)^2 = \Delta\ell^2 \, \frac{k_{\mathrm{e}} T}{\bar{S}} \quad\Rightarrow\quad \Delta t = \Delta\ell \, \sqrt{\frac{k_{\mathrm{e}} T}{\bar{S}}}. $$
-
-We write the constant of proportionality as **Δ*l*** (the "information length scale per step") so that:
-
-$$ \Delta t = \Delta\ell \, \sqrt{\frac{k_{\mathrm{e}} T}{\bar{S}}}. $$
-
-**Variables:**
-- **Δ*l*** = constant with dimensions of time (e.g. fs). It is the "information length" scale: it sets how much thermodynamic length we aim to cover per step. Once chosen, it is fixed for the run; all adaptation comes from S̄ and *T*.
+- **kₑ** = Boltzmann's constant; **T** = current (target) temperature. The factor *k*ₑ*T* is the thermal energy scale.
+- **Δ*l*** = information length scale per step (dimensions of time); fixed at startup by calibration; all adaptation comes from S̄ and *T*.
 
 **Role of the factor √(*k*ₑ*T*).** If we had used only Δ*t* ∝ 1/√S̄, then in high-T phases (e.g. during heating) S̄ is large and we would shrink Δ*t* strongly. But at high temperature, thermal fluctuations are larger, so the same absolute force or curvature is "less surprising" in information terms. Dividing by *k*ₑ*T* in the squared length and then taking the square root gives a factor √(*k*ₑ*T*) in Δ*t*: at higher *T*, we allow a larger Δ*t* for the same S̄, which avoids over-conservative timesteps during heating.
 
 **Calibration of Δ*l*.** We do not set Δ*l* by hand. At the **start** of the run we compute S̄ from the initial configuration (call it S̄₀) and the initial target temperature T₀. We want the first timestep to equal a chosen target Δ*t*₀ (e.g. 0.35 fs). So we require Δ*t*₀ = Δ*l* × √(*k*ₑ*T*₀ / S̄₀), hence:
 
-$$ \Delta\ell = \frac{\Delta t_0}{\sqrt{k_{\mathrm{e}} T_0/\bar{S}_0}} = \Delta t_0 \, \sqrt{\frac{\bar{S}_0}{k_{\mathrm{e}} T_0}}. $$
+$$ \Delta\ell = \frac{\Delta t_0}{\sqrt{k_{\mathrm{e}} T_0/\bar{S}_0}} = \Delta t_0 \sqrt{\frac{\bar{S}_0}{k_{\mathrm{e}} T_0}}. $$
 
 After this one-time calibration, Δ*l* is **fixed**; at every later step we compute S̄ and *T* and set Δ*t* = Δ*l* × √(*k*ₑ*T* / S̄). The timestep is then **clamped** to a configured interval [*dt*_min, *dt*_max] (e.g. [0.25, 1.0] fs) so that we never go below the moderate baseline’s dt in stiff regions nor exceed a safe maximum in very calm regions.
 
@@ -81,13 +51,11 @@ After this one-time calibration, Δ*l* is **fixed**; at every later step we comp
 
 ### 1.3 QEq Tolerance Budget
 
-**Context.** In ReaxFF, atomic charges are determined at each step by an iterative **charge-equilibration (QEq)** solver. The solver stops when the charge residual is below a **tolerance** *tol*: smaller *tol* means more iterations (higher cost) and smaller force error; larger *tol* means fewer iterations but larger force error, which can appear as charge and pressure noise. We want to allow **adaptive** *tol* so that in calm phases we can use a looser tolerance (saving cost) while keeping the force error within the same ETL "budget" as the timestep.
+**Context.** In ReaxFF, atomic charges are determined at each step by an iterative **charge-equilibration (QEq)** solver. The solver stops when the charge residual is below a **tolerance** *tol*: smaller *tol* means more iterations and smaller force error; larger *tol* means fewer iterations but larger force error. We want adaptive *tol* so that in calm phases we can loosen tolerance (saving cost) while keeping force error within the same ETL budget as the timestep.
 
-**Allocating a fraction of the length budget to QEq.** The total "thermodynamic length" or "cost" per step has two contributions: (1) from the integration step itself (already fixed by the dt formula), and (2) from the **force error** due to finite QEq tolerance. We allocate a **fraction α_qeq** of the total squared-length budget to the QEq contribution, so that the combined step still respects the idea of roughly constant length per step. The fraction α_qeq is a parameter (0 < α_qeq < 1); the rest of the budget is effectively from the dt term.
+**Link to the traversed length and the cap.** Each step contributes a fixed squared thermodynamic length Δℓ² from the integration (dt term). The **force error** due to finite QEq tolerance contributes an extra squared-length term in the same units (mass-weighted squared force error over *k*ₑ*T*). We allocate a **fraction α_qeq** of the *per-step* squared-length budget to this QEq contribution, so that over the whole trajectory the total squared length from QEq error stays at most a fraction α_qeq of the total squared length traversed—i.e. α_qeq is the fraction of the traversed thermodynamic length we allow to come from QEq error. The per-step budget from the dt choice is (Δ*t*² S̄)/(*k*ₑ*T*) = Δℓ², so the QEq share is α_qeq Δℓ². Dimensional consistency (same units as the squared-length contribution from forces) gives an allowed **cap** on the QEq-related squared error:
 
-**Cap on the allowed QEq force error.** The contribution of force error to the same squared-length measure (in the same units as Δℓ²) is of order (error in F²/mass) / (*k*ₑ*T*) — i.e. a mass-weighted squared force error scaled by thermal energy. We cap this contribution by a value that allocates a **fraction α_qeq** of the total squared-length budget to QEq. The total budget per step is set by the dt choice: Δ*t*² S̄ / (*k*ₑ*T*) ∝ Δ*l*². So the QEq share is α_qeq × (that budget). Dimensional consistency leads to an allowed **cap** on the QEq-related squared error:
-
-$$ \text{cap} = \alpha_{\mathrm{qeq}} \,\Delta\ell^2 \, \frac{k_{\mathrm{e}} T}{(\Delta t)^2}. $$
+$$ \text{cap} = \alpha_{\mathrm{qeq}} \Delta\ell^2 \frac{k_{\mathrm{e}} T}{(\Delta t)^2}. $$
 
 **Variables:**
 - **α_qeq** = fraction of the information-length budget allocated to QEq error (e.g. 0.65). Larger α_qeq allows more QEq error for a given step; smaller α_qeq keeps forces closer to the tight-tolerance reference.
@@ -106,7 +74,7 @@ $$ \text{cap} = \alpha_{\mathrm{qeq}} \,\Delta\ell^2 \, \frac{k_{\mathrm{e}} T}{
 
 **Choosing tolerance from the cap.** We require *err* ≤ cap. Using the fitted model, *err* ≈ 10^(A + B log₁₀(*tol*)) = 10^A × *tol*^B. So we need 10^A × *tol*^B ≤ cap, hence *tol*^B ≤ cap / 10^A. If B < 0, this gives *tol* ≥ (cap / 10^A)^(1/B); we want the **largest** *tol* that still satisfies *err* ≤ cap, so we take:
 
-$$ \mathit{tol} = \min\bigl( \mathit{tol}_{\max},\, \max\bigl( \mathit{tol}_{\min},\, (\text{cap}/10^A)^{1/B} \bigr) \bigr). $$
+$$ \mathit{tol} = \min\bigl( \mathit{tol}_{\max}, \max\bigl( \mathit{tol}_{\min}, (\text{cap}/10^A)^{1/B} \bigr) \bigr). $$
 
 **Variables:**
 - **tol_min** = lower bound on tolerance (e.g. 10⁻⁶) so we never over-tighten beyond numerical usefulness.
@@ -131,13 +99,9 @@ $$ \mathit{tol} = \min\bigl( \mathit{tol}_{\max},\, \max\bigl( \mathit{tol}_{\mi
 
 with *s* capped at *t_ps*. So the virtual clock advances by **more** than the simulated time when speed_factor > 1, and by **exactly** the simulated time when speed_factor = 1.
 
-**Definition and derivation of speed_factor.** We want the virtual clock to advance **faster than real time** when the system is "easy" (low S̄) and **at real time** when the system is "hard" (high S̄), so that we do not skip difficult dynamics. The "amount of schedule" we have effectively covered in a chunk should scale with how much "information" or "work" we have done. In the same spirit as the dt formula, the work or cost of a chunk scales with (simulated time) × √S̄ (so that harder chunks count more). To keep **progress along the schedule** uniform in that measure, we want the virtual advance to be proportional to (chunk_wall_ps × √S̄). We compare this to a **reference** level of difficulty S̄_ref (a typical "hot-phase" or high S̄). If we traversed the same chunk_wall_ps at difficulty S̄_ref, the "effective" progress would be proportional to chunk_wall_ps × √S̄_ref. So the ratio of "effective progress at current S̄" to "progress at reference S̄" is (chunk_wall_ps × √S̄) / (chunk_wall_ps × √S̄_ref) = √(S̄ / S̄_ref). To make the virtual clock advance **faster** when the system is **easier** (S̄ < S̄_ref), we want the virtual advance to be **larger** than chunk_wall_ps when S̄ < S̄_ref. So we set:
+**Definition and derivation of speed_factor.** The virtual clock should advance **faster than real time** when the system is easy (low S̄) and **at real time** when it is hard (high S̄), so we do not skip difficult dynamics. The idea: the same chunk of simulated time represents less dynamical "work" when S̄ is low, so we credit it with **more** virtual time—we have effectively covered more of the schedule. So we set the virtual advance for a chunk to chunk_wall_ps × speed_factor, with speed_factor chosen so that easy chunks count for more virtual time. In the same ETL spirit as the dt formula, the work of a chunk scales with chunk_wall_ps × √S̄. We compare to a **reference** stiffness S̄_ref (e.g. a typical hot-phase value). If we had traversed the same chunk_wall_ps at reference stiffness, the work would scale as chunk_wall_ps × √S̄_ref. To credit the current chunk with the virtual time equivalent of that reference work, we want chunk_wall_ps × speed_factor to equal the virtual time that would correspond to chunk_wall_ps × √S̄_ref worth of work when the current work is chunk_wall_ps × √S̄. So the ratio (virtual advance) / (chunk_wall_ps) should be (reference work) / (current work) = √S̄_ref / √S̄. Hence speed_factor = √(S̄_ref / S̄). When S̄ < S̄_ref we get speed_factor > 1 (virtual clock runs ahead); when S̄ ≥ S̄_ref we floor speed_factor at 1 so we never advance slower than real time. Thus:
 
-**speed_factor = √(S̄_ref / S̄)** when S̄ < S̄_ref (then speed_factor > 1),
-
-and we **floor** speed_factor at 1 so that we never advance the virtual clock **slower** than real time (which would delay completion and would be conservative rather than beneficial). Thus:
-
-$$ \text{speed\_factor} = \max\left(1,\, \sqrt{\frac{\bar{S}_{\mathrm{ref}}}{\bar{S}}}\right). $$
+$$ \text{speed\_factor} = \max\left(1, \sqrt{\frac{\bar{S}_{\mathrm{ref}}}{\bar{S}}}\right). $$
 
 **Variables:**
 - **S̄** = current force power (same as in the dt formula) in this chunk.
